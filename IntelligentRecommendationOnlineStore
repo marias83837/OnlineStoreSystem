@@ -56,7 +56,7 @@ public class StoreRecommendationSystem {
         StoreRecommendationSystem recommendationSystem = new StoreRecommendationSystem();
         
         // Load RDF file
-        Model model = FileManager.get().loadModel("stores.rdf");
+        Model model = FileManager.get().loadModel("SBSM.rdf");
         
         // Create a Reasoner with SWRL support
         Reasoner reasoner = ReasonerRegistry.getOWLReasoner().bindSchema(SWRLFactory.create(model));
@@ -73,7 +73,7 @@ public class StoreRecommendationSystem {
             CBRCase newCase = new CBRCase();
             Description description = new Description(subject.getLocalName(), predicate.getLocalName(), object.toString());
             
-            //  SWRL reasoning to the case description
+            // Apply SWRL reasoning to the case description
             InfModel infModel = ModelFactory.createInfModel(reasoner, model);
             Resource inferredResource = infModel.getResource(subject.getLocalName());
             StmtIterator inferredIter = inferredResource.listProperties();
@@ -90,15 +90,18 @@ public class StoreRecommendationSystem {
             recommendationSystem.addCase(newCase);
         }
         
-        // Create a query case (you can customize this with user preferences from the user history)
+        // Query case with user profile info
         CBRCase queryCase = new CBRCase();
-        queryCase.setDescription(new Description("User Preference", "Electronics", "New York"));
+        Description queryDescription = new Description("User Preference", "Electronics", "New York");
+        queryDescription.addBelief("HasInterest", "Gaming");
+        queryDescription.addBelief("HasInterest", "Technology");
+        queryCase.setDescription(queryDescription);
         
         // Retrieve similar cases
         Collection<CBRCase> similarCases = recommendationSystem.retrieveSimilarCases(queryCase, 3);
         
-        // Display recommended stores
-        System.out.println("Recommended Stores:");
+        // Display recommended products
+        System.out.println("Recommended products:");
         for (CBRCase similarCase : similarCases) {
             Description description = (Description) similarCase.getDescription();
             System.out.println(description.getStoreName());
