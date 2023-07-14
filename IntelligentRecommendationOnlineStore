@@ -1,0 +1,107 @@
+import jcolibri.cbrcore.*;
+import jcolibri.cbrcore.CBRCase;
+import jcolibri.method.retrieve.RetrievalResult;
+import jcolibri.method.retrieve.NNretrieval.NNConfig;
+import jcolibri.method.retrieve.NNretrieval.NNScoringMethod;
+import jcolibri.method.retrieve.NNretrieval.similarity.GlobalSimilarityFunction;
+import jcolibri.method.retrieve.selection.SelectCases;
+import jcolibri.util.*;
+import jcolibri.exception.ExecutionException;
+import java.util.*;
+import org.apache.jena.rdf.model.*;
+import org.apache.jena.util.FileManager;
+
+public class StoreRecommendationSystem {
+    
+    CBRCaseBase caseBase;
+    
+    public StoreRecommendationSystem() {
+        caseBase = new CBRCaseBase();
+    }
+    
+    public void addCase(CBRCase newCase) {
+        caseBase.learnCases(newCase);
+    }
+    
+    public Collection<CBRCase> retrieveSimilarCases(CBRCase queryCase, int k) {
+        NNConfig nnConfig = new NNConfig();
+        nnConfig.setDescriptionSimFunction(new GlobalSimilarityFunction() {
+            @Override
+            public double compute(Object o1, Object o2) throws jcolibri.exception.NoApplicableSimilarityFunctionException {
+                // Define your similarity measure between cases' descriptions here
+                // You can consider features like category, ratings, location, etc.
+                // Return a similarity value between 0 and 1
+                return 0.0;
+            }
+
+            @Override
+            public boolean isApplicable(Object o1, Object o2) {
+                return true;
+            }
+
+            @Override
+            public void setSimilarities(HashMap<Object, HashMap<Object, Double>> hm) {}
+        });
+        
+        try {
+            Collection<RetrievalResult> results = NNScoringMethod.evaluateSimilarity(caseBase.getCases(), queryCase, nnConfig);
+            return SelectCases.selectTopK(results, k);
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+    
+    public static void main(String[] args) {
+        StoreRecommendationSystem recommendationSystem = new StoreRecommendationSystem();
+        
+        // Load RDF file
+        Model model = FileManager.get().loadModel("stores.rdf");
+        
+        // Create a Reasoner with SWRL support
+        Reasoner reasoner = ReasonerRegistry.getOWLReasoner().bindSchema(SWRLFactory.create(model));
+        
+        // Iterate over RDF statements and create cases
+        StmtIterator iter = model.listStatements();
+        while (iter.hasNext()) {
+            Statement stmt = iter.nextStatement();
+            Resource subject = stmt.getSubject();
+            Property predicate = stmt.getPredicate();
+            RDFNode object = stmt.getObject();
+            
+            // Create a case and set its description
+            CBRCase newCase = new CBRCase();
+            Description description = new Description(subject.getLocalName(), predicate.getLocalName(), object.toString());
+            
+            //  SWRL reasoning to the case description
+            InfModel infModel = ModelFactory.createInfModel(reasoner, model);
+            Resource inferredResource = infModel.getResource(subject.getLocalName());
+            StmtIterator inferredIter = inferredResource.listProperties();
+            while (inferredIter.hasNext()) {
+                Statement inferredStmt = inferredIter.nextStatement();
+                Property inferredPredicate = inferredStmt.getPredicate();
+                RDFNode inferredObject = inferredStmt.getObject();
+                description.addBelief(inferredPredicate.getLocalName(), inferredObject.toString());
+            }
+            
+            newCase.setDescription(description);
+            
+            // Add the case to the case base
+            recommendationSystem.addCase(newCase);
+        }
+        
+        // Create a query case (you can customize this with user preferences from the user history)
+        CBRCase queryCase = new CBRCase();
+        queryCase.setDescription(new Description("User Preference", "Electronics", "New York"));
+        
+        // Retrieve similar cases
+        Collection<CBRCase> similarCases = recommendationSystem.retrieveSimilarCases(queryCase, 3);
+        
+        // Display recommended stores
+        System.out.println("Recommended Stores:");
+        for (CBRCase similarCase : similarCases) {
+            Description description = (Description) similarCase.getDescription();
+            System.out.println(description.getStoreName());
+        }
+    }
+}
