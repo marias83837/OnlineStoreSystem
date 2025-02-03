@@ -1,110 +1,194 @@
-import jcolibri.cbrcore.*;
-import jcolibri.cbrcore.CBRCase;
-import jcolibri.method.retrieve.RetrievalResult;
-import jcolibri.method.retrieve.NNretrieval.NNConfig;
-import jcolibri.method.retrieve.NNretrieval.NNScoringMethod;
-import jcolibri.method.retrieve.NNretrieval.similarity.GlobalSimilarityFunction;
-import jcolibri.method.retrieve.selection.SelectCases;
-import jcolibri.util.*;
-import jcolibri.exception.ExecutionException;
-import java.util.*;
+<dependencies>
+    <!-- jCOLIBRI for Case-Based Reasoning -->
+    <dependency>
+        <groupId>es.ucm.fdi</groupId>
+        <artifactId>jcolibri2</artifactId>
+        <version>2.3</version>
+    </dependency>
+
+    <!-- Apache Jena for RDF and OWL reasoning -->
+    <dependency>
+        <groupId>org.apache.jena</groupId>
+        <artifactId>apache-jena-libs</artifactId>
+        <version>4.9.0</version>
+        <type>pom</type>
+    </dependency>
+
+    <!-- HermiT Reasoner for OWL -->
+    <dependency>
+        <groupId>net.sourceforge.owlapi</groupId>
+        <artifactId>org.semanticweb.hermit</artifactId>
+        <version>1.4.3</version>
+    </dependency>
+</dependencies>
 import org.apache.jena.rdf.model.*;
+import org.apache.jena.reasoner.*;
+import org.apache.jena.reasoner.rulesys.*;
 import org.apache.jena.util.FileManager;
+import java.io.InputStream;
 
-public class StoreRecommendationSystem {
+public class BSBMOntologyLoader {
+    private Model model;
     
-    CBRCaseBase caseBase;
-    
-    public StoreRecommendationSystem() {
-        caseBase = new CBRCaseBase();
-    }
-    
-    public void addCase(CBRCase newCase) {
-        caseBase.learnCases(newCase);
-    }
-    
-    public Collection<CBRCase> retrieveSimilarCases(CBRCase queryCase, int k) {
-        NNConfig nnConfig = new NNConfig();
-        nnConfig.setDescriptionSimFunction(new GlobalSimilarityFunction() {
-            @Override
-            public double compute(Object o1, Object o2) throws jcolibri.exception.NoApplicableSimilarityFunctionException {
-                // Define your similarity measure between cases' descriptions here
-                // You can consider features like category, ratings, location, etc.
-                // Return a similarity value between 0 and 1
-                return 0.0;
-            }
-
-            @Override
-            public boolean isApplicable(Object o1, Object o2) {
-                return true;
-            }
-
-            @Override
-            public void setSimilarities(HashMap<Object, HashMap<Object, Double>> hm) {}
-        });
+    public BSBMOntologyLoader(String datasetPath, String ontologyPath) {
+        model = ModelFactory.createDefaultModel();
         
+        // Load BSBM dataset
+        InputStream datasetStream = FileManager.get().open(datasetPath);
+        model.read(datasetStream, null, "TURTLE");
+
+        // Load Ontology
+        InputStream ontologyStream = FileManager.get().open(ontologyPath);
+        model.read(ontologyStream, null, "RDF/XML");
+
+        // Apply OWL Reasoning
+        Reasoner reasoner = PelletReasonerFactory.theInstance().create();
+        InfModel infModel = ModelFactory.createInfModel(reasoner, model);
+        
+        model = infModel; // Update model with inferred knowledge
+    }
+
+    public Model getModel() {
+        return model;
+    }
+}
+import jcolibri.cbrcore.CBRCase;
+import org.apache.jena.query.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class RDFToCBRConverter {
+    public static List<CBRCase> convertToCBRCases(Model model) {
+        List<CBRCase> cases = new ArrayList<>();
+        
+        String sparqlQuery = "SELECT ?product ?feature ?value WHERE { " +
+                             "?product a bsbmroduct . " +
+                             "?product ?feature ?value . }";
+        
+        Query query = QueryFactory.create(sparqlQuery);
+        try (QueryExecution qexec = QueryExecutionFactory.create(query, model)) {
+            ResultSet results = qexec.execSelect();
+            
+            while (results.hasNext()) {
+                QuerySolution solution = results.next();
+                CBRCase cbrCase = new CBRCase();
+                CaseDescription description = new CaseDescription();
+                
+                description.setProduct(solution.get("product").toString());
+                description.setFeature(solution.get("feature").toString());
+                description.setValue(solution.get("value").toString());
+                
+                cbrCase.setDescription(description);
+                cases.add(cbrCase);
+            }
+        }
+        return cases;
+    }
+}
+import jcolibri.cbrcore.CaseComponent;
+
+public class CaseDescription implements CaseComponent {
+    private String product;
+    private String feature;
+    private String value;
+
+    public Attribute getIdAttribute() {
+        return new Attribute("product", this.getClass());
+    }
+
+    public String getProduct() {
+        return product;
+    }
+
+    public void setProduct(String product) {
+        this.product = product;
+    }
+
+    public String getFeature() {
+        return feature;
+    }
+
+    public void setFeature(String feature) {
+        this.feature = feature;
+    }
+
+    public String getValue() {
+        return value;
+    }
+
+    public void setValue(String value) {
+        this.value = value;
+    }
+}
+import jcolibri.cbrcore.*;
+import jcolibri.method.retrieve.FilterBasedRetrieval;
+import jcolibri.method.retrieve.NNretrieval.NNScoringMethod;
+import jcolibri.method.retrieve.selection.KNNSelectionMethod;
+
+import java.util.Collection;
+
+public class DisjunctiveBeliefReasoning implements CBRApplication {
+    private CBRCaseBase caseBase;
+    private BSBMOntologyLoader ontologyLoader;
+
+    @Override
+    public void configure() throws ExecutionException {
+        ontologyLoader = new BSBMOntologyLoader("data/bsbm-dataset.ttl", "data/bsbm-ontology.owl");
+        caseBase = new DefaultCaseBase();
+        caseBase.init(new PlainTextConnector());
+    }
+
+    @Override
+    public CBRCaseBase preCycle() throws ExecutionException {
+        Collection<CBRCase> cases = RDFToCBRConverter.convertToCBRCases(ontologyLoader.getModel());
+        caseBase.learnCases(cases);
+        return caseBase;
+    }
+
+    @Override
+    public void cycle(CBRQuery query) throws ExecutionException {
+        Collection<CBRCase> retrievedCases = FilterBasedRetrieval.filterCases(caseBase.getCases(), query,
+            (CBRCase c) -> matchDisjunctiveConditions(c, query)
+        );
+
+        Collection<RetrievalResult> rankedCases = NNScoringMethod.evaluateSimilarity(retrievedCases, query, new LinearCaseSimilarity());
+        Collection<CBRCase> selectedCases = KNNSelectionMethod.selectTopKCases(5, rankedCases);
+        
+        System.out.println("Retrieved Cases:");
+        for (CBRCase retrievedCase : selectedCases) {
+            System.out.println(retrievedCase.getDescription());
+        }
+    }
+
+    private boolean matchDisjunctiveConditions(CBRCase c, CBRQuery query) {
+        CaseDescription caseDesc = (CaseDescription) c.getDescription();
+        CaseDescription queryDesc = (CaseDescription) query.getDescription();
+
+        return caseDesc.getFeature().equalsIgnoreCase(queryDesc.getFeature()) ||
+               caseDesc.getValue().equalsIgnoreCase(queryDesc.getValue());
+    }
+
+    @Override
+    public void postCycle() throws ExecutionException {
+        caseBase.close();
+    }
+
+    public static void main(String[] args) {
         try {
-            Collection<RetrievalResult> results = NNScoringMethod.evaluateSimilarity(caseBase.getCases(), queryCase, nnConfig);
-            return SelectCases.selectTopK(results, k);
+            DisjunctiveBeliefReasoning app = new DisjunctiveBeliefReasoning();
+            app.configure();
+            app.preCycle();
+
+            CBRQuery query = new CBRQuery();
+            CaseDescription queryDesc = new CaseDescription();
+            queryDesc.setFeature("color");
+            queryDesc.setValue("red");
+            query.setDescription(queryDesc);
+
+            app.cycle(query);
+            app.postCycle();
         } catch (ExecutionException e) {
             e.printStackTrace();
-            return new ArrayList<>();
-        }
-    }
-    
-    public static void main(String[] args) {
-        StoreRecommendationSystem recommendationSystem = new StoreRecommendationSystem();
-        
-        // Load RDF file
-        Model model = FileManager.get().loadModel("SBSM.rdf");
-        
-        // Create a Reasoner with SWRL support
-        Reasoner reasoner = ReasonerRegistry.getOWLReasoner().bindSchema(SWRLFactory.create(model));
-        
-        // Iterate over RDF statements and create cases
-        StmtIterator iter = model.listStatements();
-        while (iter.hasNext()) {
-            Statement stmt = iter.nextStatement();
-            Resource subject = stmt.getSubject();
-            Property predicate = stmt.getPredicate();
-            RDFNode object = stmt.getObject();
-            
-            // Create a case and set its description
-            CBRCase newCase = new CBRCase();
-            Description description = new Description(subject.getLocalName(), predicate.getLocalName(), object.toString());
-            
-            // Apply SWRL reasoning to the case description
-            InfModel infModel = ModelFactory.createInfModel(reasoner, model);
-            Resource inferredResource = infModel.getResource(subject.getLocalName());
-            StmtIterator inferredIter = inferredResource.listProperties();
-            while (inferredIter.hasNext()) {
-                Statement inferredStmt = inferredIter.nextStatement();
-                Property inferredPredicate = inferredStmt.getPredicate();
-                RDFNode inferredObject = inferredStmt.getObject();
-                description.addBelief(inferredPredicate.getLocalName(), inferredObject.toString());
-            }
-            
-            newCase.setDescription(description);
-            
-            // Add the case to the case base
-            recommendationSystem.addCase(newCase);
-        }
-        
-        // Query case with user profile info
-        CBRCase queryCase = new CBRCase();
-        Description queryDescription = new Description("User Preference", "Electronics", "New York");
-        queryDescription.addBelief("HasInterest", "Gaming");
-        queryDescription.addBelief("HasInterest", "Technology");
-        queryCase.setDescription(queryDescription);
-        
-        // Retrieve similar cases
-        Collection<CBRCase> similarCases = recommendationSystem.retrieveSimilarCases(queryCase, 3);
-        
-        // Display recommended products
-        System.out.println("Recommended products:");
-        for (CBRCase similarCase : similarCases) {
-            Description description = (Description) similarCase.getDescription();
-            System.out.println(description.getStoreName());
         }
     }
 }
