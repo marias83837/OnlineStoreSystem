@@ -1,0 +1,73 @@
+@prefix bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Categories
+<http://example.com/category/books> a bsbmroductCategory ; rdfs:label "Books" .
+<http://example.com/category/music> a bsbmroductCategory ; rdfs:label "Music" .
+<http://example.com/category/movies> a bsbmroductCategory ; rdfs:label "Movies" .
+<http://example.com/category/games> a bsbmroductCategory ; rdfs:label "Games" .
+<http://example.com/category/electronics> a bsbmroductCategory ; rdfs:label "Electronics" .
+<http://example.com/category/clothing> a bsbmroductCategory ; rdfs:label "Clothing" .
+<http://example.com/category/sports> a bsbmroductCategory ; rdfs:label "Sports" .
+<http://example.com/category/home_garden> a bsbmroductCategory ; rdfs:label "Home & Garden" .
+<http://example.com/category/health_beauty> a bsbmroductCategory ; rdfs:label "Health & Beauty" .
+<http://example.com/category/toys> a bsbmroductCategory ; rdfs:label "Toys" .
+
+# Sample Products
+<http://example.com/product1> a bsbmroduct ;
+    rdfs:label "The Great Gatsby" ;
+    bsbm:producer <http://example.com/producer1> ;
+    bsbm:productCategory <http://example.com/category/books> .
+
+<http://example.com/product2> a bsbmroduct ;
+    rdfs:label "Wireless Headphones" ;
+    bsbm:producer <http://example.com/producer2> ;
+    bsbm:productCategory <http://example.com/category/electronics> .
+
+<http://example.com/product3> a bsbmroduct ;
+    rdfs:label "Running Shoes" ;
+    bsbm:producer <http://example.com/producer3> ;
+    bsbm:productCategory <http://example.com/category/sports> .
+
+# Producers
+<http://example.com/producer1> a bsbmroducer ; rdfs:label "Penguin Books" .
+<http://example.com/producer2> a bsbmroducer ; rdfs:label "TechSound" .
+<http://example.com/producer3> a bsbmroducer ; rdfs:label "Nike" .
+
+# Vendors & Offers
+<http://example.com/vendor1> a bsbm:Vendor ; rdfs:label "Amazon" .
+<http://example.com/vendor2> a bsbm:Vendor ; rdfs:label "Best Buy" .
+<http://example.com/vendor3> a bsbm:Vendor ; rdfs:label "Nike Store" .
+
+<http://example.com/offer1> a bsbm:Offer ;
+    bsbm:product <http://example.com/product1> ;
+    bsbm:vendor <http://example.com/vendor1> ;
+    bsbm:price 12.99 ;
+    bsbm:validTo "2025-12-31"^^xsd:date .
+
+<http://example.com/offer2> a bsbm:Offer ;
+    bsbm:product <http://example.com/product2> ;
+    bsbm:vendor <http://example.com/vendor2> ;
+    bsbm:price 199.99 ;
+    bsbm:validTo "2025-06-30"^^xsd:date .
+
+# Reviews
+<http://example.com/review1> a bsbm:Review ;
+    bsbm:reviewer <http://example.com/user1> ;
+    bsbm:reviewDate "2025-01-15"^^xsd:date ;
+    bsbm:rating 5.0 ;
+    bsbm:text "An amazing classic novel!" ;
+    bsbm:product <http://example.com/product1> .
+
+<http://example.com/review2> a bsbm:Review ;
+    bsbm:reviewer <http://example.com/user2> ;
+    bsbm:reviewDate "2025-02-01"^^xsd:date ;
+    bsbm:rating 4.0 ;
+    bsbm:text "Great sound quality but a bit expensive." ;
+    bsbm:product <http://example.com/product2> .
+
+# Users (Reviewers)
+<http://example.com/user1> a bsbm:Reviewer ; rdfs:label "Alice" .
+<http://example.com/user2> a bsbm:Reviewer ; rdfs:label "Bob" .
